@@ -77,7 +77,9 @@ export const MyDonationsView: React.FC<MyDonationsViewProps> = ({
             const expiry = getExpiryRemaining(donation.expiry_time);
             const donationClaims = claims.filter((c) => c.donation_id === donation.id);
             const pendingCount = donationClaims.filter((c) => c.status === 'PENDING').length;
-            const approvedClaim = donationClaims.find((c) => c.status === 'APPROVED');
+            const approvedClaim = donationClaims.find(
+              (c) => c.status === 'APPROVED' || c.status === 'COMPLETED'
+            );
             const activeTracking = approvedClaim
               ? trackingRecords.find((t) => t.donation_request_id === approvedClaim.id)
               : null;
@@ -142,9 +144,13 @@ export const MyDonationsView: React.FC<MyDonationsViewProps> = ({
                     )}
                   </button>
 
-                  {(donation.status === 'RESERVED' || (approvedClaim && approvedClaim.status === 'APPROVED')) && (
+                  {activeTracking && activeTracking.pickup_status !== 'VERIFIED' && (
                     <button
-                      onClick={() => onVerifyHandover ? onVerifyHandover(donation.id) : (activeTracking && onOpenTracking(activeTracking.id))}
+                      onClick={() =>
+                        onVerifyHandover
+                          ? onVerifyHandover(donation.id)
+                          : onOpenTracking(activeTracking.id)
+                      }
                       className="px-4 py-2 rounded-xl bg-[#2D6A4F] hover:bg-[#1B4332] text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
                     >
                       <ShieldCheck className="w-4 h-4" />

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Donation } from '../types/index.ts';
 import { useStore } from '../domain/store.tsx';
 import { maskPhoneNumber } from '../domain/rules.ts';
+import { ModalShell } from './ModalShell.tsx';
 import {
   X,
   Check,
@@ -60,13 +61,12 @@ export const DonorClaimsReviewModal: React.FC<DonorClaimsReviewModalProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="review-claims-title"
+    <ModalShell
+      onClose={onClose}
+      labelledBy="review-claims-title"
+      maxWidth="max-w-xl"
+      panelClassName="p-6 sm:p-8"
     >
-      <div className="relative w-full max-w-xl bg-white rounded-3xl border border-[#E8DEC9] shadow-2xl p-6 sm:p-8 my-8">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#F3ECE1] text-[#7E7063] transition-colors"
@@ -106,6 +106,13 @@ export const DonorClaimsReviewModal: React.FC<DonorClaimsReviewModalProps> = ({
                   <p className="text-[11px] text-[#2D6A4F]">
                     {approvedClaim.receiver_org || 'Community Member'} · Phone: {approvedClaim.receiver_phone}
                   </p>
+                  {approvedClaim.pickup_mode === 'RUNNER' && (
+                    <p className="text-[11px] text-[#2563EB] mt-0.5">
+                      {approvedClaim.runner_name
+                        ? `Rescue Runner: ${approvedClaim.runner_name} (${approvedClaim.runner_phone})`
+                        : 'Waiting for a Rescue Runner to accept this run'}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -178,6 +185,12 @@ export const DonorClaimsReviewModal: React.FC<DonorClaimsReviewModalProps> = ({
                       </span>
                     )}
 
+                    {claim.pickup_mode === 'RUNNER' && (
+                      <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#EFF6FF] text-[#2563EB] border border-[#2563EB]/20">
+                        Rescue Runner requested
+                      </span>
+                    )}
+
                     {claim.request_message && (
                       <p className="mt-2 text-xs text-[#4E4035] bg-white p-2.5 rounded-lg border border-[#E8DEC9]/60 italic">
                         "{claim.request_message}"
@@ -232,7 +245,6 @@ export const DonorClaimsReviewModal: React.FC<DonorClaimsReviewModalProps> = ({
             Close
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };

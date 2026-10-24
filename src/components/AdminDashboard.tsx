@@ -149,6 +149,7 @@ export const AdminDashboard: React.FC = () => {
               <option value="all">All Roles</option>
               <option value="DONOR">Donors</option>
               <option value="RECEIVER">Receivers</option>
+              <option value="RUNNER">Rescue Runners</option>
               <option value="ADMIN">Admins</option>
             </select>
 
@@ -197,11 +198,14 @@ export const AdminDashboard: React.FC = () => {
                           ? 'text-[#D97706]'
                           : user.role === 'RECEIVER'
                           ? 'text-[#2D6A4F]'
+                          : user.role === 'RUNNER'
+                          ? 'text-[#2563EB]'
                           : 'text-[#BA181B]'
                       }`}
                     >
                       <option value="DONOR">DONOR</option>
                       <option value="RECEIVER">RECEIVER</option>
+                      <option value="RUNNER">RUNNER</option>
                       <option value="ADMIN">ADMIN</option>
                     </select>
                   </td>

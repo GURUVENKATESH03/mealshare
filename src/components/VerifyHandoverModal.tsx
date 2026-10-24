@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../domain/store.tsx';
 import { Donation, PickupTracking } from '../types/index.ts';
+import { ModalShell } from './ModalShell.tsx';
 import {
   X,
   ShieldCheck,
@@ -25,12 +26,17 @@ export const VerifyHandoverModal: React.FC<VerifyHandoverModalProps> = ({
 }) => {
   const { currentUser, donations, claims, trackingRecords, verifyHandover } = useStore();
 
-  // Find all donations owned by current donor that are RESERVED or have an approved claim
-  const reservedDonations = donations.filter(
-    (d) =>
-      d.donor_id === currentUser?.id &&
-      (d.status === 'RESERVED' || claims.some((c) => c.donation_id === d.id && c.status === 'APPROVED'))
-  );
+  // Only listings that actually have a live tracking record can be verified.
+  // Approval alone is not enough: the OTP is issued when collection starts.
+  const reservedDonations = donations.filter((d) => {
+    if (d.donor_id !== currentUser?.id) return false;
+    const approved = claims.find(
+      (c) => c.donation_id === d.id && (c.status === 'APPROVED' || c.status === 'COMPLETED')
+    );
+    if (!approved) return false;
+    const trackingRecord = trackingRecords.find((t) => t.donation_request_id === approved.id);
+    return !!trackingRecord && trackingRecord.pickup_status !== 'CANCELLED';
+  });
 
   const [selectedDonationId, setSelectedDonationId] = useState<string>(
     initialDonationId || reservedDonations[0]?.id || ''
@@ -134,11 +140,13 @@ export const VerifyHandoverModal: React.FC<VerifyHandoverModalProps> = ({
 
     if (res.success) {
       setIsVerifiedSuccess(true);
+      const collectedBy = tracking.pickup_person_name || approvedClaim?.receiver_name || 'Receiver';
       setFinalReceipt({
         donationTitle: selectedDonation?.title || 'Surplus Food',
         quantity: `${selectedDonation?.quantity} ${selectedDonation?.quantity_unit}`,
-        receiverName: approvedClaim?.receiver_name || tracking.pickup_person_name,
-        receiverOrg: approvedClaim?.receiver_org,
+        receiverName: collectedBy,
+        receiverOrg:
+          collectedBy === approvedClaim?.receiver_name ? approvedClaim?.receiver_org : undefined,
         verifiedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         verifiedCode: fullCode,
       });
@@ -148,13 +156,12 @@ export const VerifyHandoverModal: React.FC<VerifyHandoverModalProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="verify-handover-title"
+    <ModalShell
+      onClose={onClose}
+      labelledBy="verify-handover-title"
+      maxWidth="max-w-xl"
+      panelClassName="p-6 sm:p-8"
     >
-      <div className="relative w-full max-w-xl bg-white rounded-3xl border border-[#E8DEC9] shadow-2xl p-6 sm:p-8 my-8">
         {/* Top Close Button */}
         <button
           onClick={onClose}
@@ -178,11 +185,26 @@ export const VerifyHandoverModal: React.FC<VerifyHandoverModalProps> = ({
           Verify Physical Handover
         </h2>
         <p className="text-xs text-[#7E7063] mt-1 leading-relaxed">
-          Ask the receiver to show the 6-digit code on their FoodSaver app after the physical collection is complete. Entering the code finalizes the transaction.
+          Ask the receiver or assigned Rescue Runner to show their single-use 6-digit code after the physical collection is complete. Entering it consumes the code and finalizes the transaction.
         </p>
 
-        {/* SUCCESS RECEIPT STATE */}
-        {isVerifiedSuccess && finalReceipt ? (
+        {reservedDonations.length === 0 ? (
+          <div className="mt-6 p-6 rounded-2xl bg-[#FAF7F2] border border-[#E8DEC9] text-center">
+            <Package className="w-8 h-8 text-[#D5C9B5] mx-auto mb-2" />
+            <p className="text-sm font-semibold text-[#1E1611]">No handover is ready to verify</p>
+            <p className="text-xs text-[#7E7063] mt-1 max-w-sm mx-auto leading-relaxed">
+              A one-time code is issued only when the receiver (or assigned Rescue Runner) starts the
+              pickup. Once collection is underway, this screen will accept their 6-digit code.
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-4 px-4 py-2 rounded-xl bg-white border border-[#E8DEC9] text-xs font-semibold text-[#4E4035] hover:bg-[#F3ECE1]"
+            >
+              Back to dashboard
+            </button>
+          </div>
+        ) : isVerifiedSuccess && finalReceipt ? (
           <div className="mt-6 p-6 rounded-2xl bg-[#E8F5EE] border border-[#2D6A4F]/30 animate-in fade-in zoom-in-95 duration-200">
             <div className="w-12 h-12 rounded-full bg-[#2D6A4F] text-white flex items-center justify-center mx-auto mb-3 shadow-md">
               <CheckCircle2 className="w-7 h-7" />
@@ -369,7 +391,6 @@ export const VerifyHandoverModal: React.FC<VerifyHandoverModalProps> = ({
             </form>
           </div>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 };

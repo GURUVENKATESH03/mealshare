@@ -13,11 +13,12 @@ import {
   UserCheck,
   LogOut,
   PlusCircle,
+  Bike,
 } from 'lucide-react';
 
 interface NavbarProps {
-  currentTab: 'feed' | 'map' | 'my-claims' | 'my-donations' | 'admin';
-  setCurrentTab: (tab: 'feed' | 'map' | 'my-claims' | 'my-donations' | 'admin') => void;
+  currentTab: 'feed' | 'map' | 'my-claims' | 'my-donations' | 'runner' | 'admin';
+  setCurrentTab: (tab: 'feed' | 'map' | 'my-claims' | 'my-donations' | 'runner' | 'admin') => void;
   onOpenCreateDonation: () => void;
   onOpenNotifications: () => void;
   onOpenAuth: () => void;
@@ -34,15 +35,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenChat,
   onOpenVerifyHandover,
 }) => {
-  const { currentUser, users, donations, claims, loginAs, logout, unreadNotificationsCount } = useStore();
+  const {
+    currentUser,
+    users,
+    trackingRecords,
+    loginAs,
+    logout,
+    unreadNotificationsCount,
+  } = useStore();
   const [showPersonaMenu, setShowPersonaMenu] = useState(false);
 
   const hasPendingHandovers =
     currentUser?.role === 'DONOR' &&
-    donations.some(
-      (d) =>
-        d.donor_id === currentUser.id &&
-        (d.status === 'RESERVED' || claims.some((c) => c.donation_id === d.id && c.status === 'APPROVED'))
+    trackingRecords.some(
+      (t) => t.donor_id === currentUser.id && t.pickup_status === 'EN_ROUTE'
     );
 
   return (
@@ -97,6 +103,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               My Listings
+            </button>
+          ) : currentUser?.role === 'RUNNER' ? (
+            <button
+              onClick={() => setCurrentTab('runner')}
+              className={`whitespace-nowrap shrink-0 transition-colors py-1 flex items-center gap-1.5 ${
+                currentTab === 'runner'
+                  ? 'text-[#1E1611] font-semibold border-b-2 border-[#2563EB]'
+                  : 'text-[#4E4035] hover:text-[#1E1611]'
+              }`}
+            >
+              <Bike className="w-4 h-4 text-[#2563EB]" />
+              Rescue Runs
             </button>
           ) : (
             <button
@@ -181,6 +199,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                       ? 'bg-[#D97706]'
                       : currentUser.role === 'RECEIVER'
                       ? 'bg-[#2D6A4F]'
+                      : currentUser.role === 'RUNNER'
+                      ? 'bg-[#2563EB]'
                       : 'bg-[#BA181B]'
                   }`}
                 />
@@ -232,6 +252,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                               ? 'text-[#D97706]'
                               : u.role === 'RECEIVER'
                               ? 'text-[#2D6A4F]'
+                              : u.role === 'RUNNER'
+                              ? 'text-[#2563EB]'
                               : 'text-[#BA181B]'
                           }`}
                         >

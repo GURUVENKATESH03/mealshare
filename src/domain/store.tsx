@@ -9,6 +9,7 @@ import {
   NotificationItem,
   AuditLog,
   Role,
+  PickupMode,
   ToastNotification,
 } from '../types/index.ts';
 import {
@@ -25,6 +26,7 @@ import {
   arbitrateClaimApproval,
   verifyHandoverCode,
   generateHandoverCode,
+  getOtpExpiryIso,
   isDonationExpired,
 } from './rules.ts';
 import confetti from 'canvas-confetti';
@@ -49,7 +51,7 @@ interface StoreContextType extends StoreState {
     email: string;
     phone_number: string;
     organization_name?: string;
-    role: 'DONOR' | 'RECEIVER'; // ADMIN NEVER allowed here
+    role: 'DONOR' | 'RECEIVER' | 'RUNNER'; // ADMIN NEVER allowed here
     address: string;
     city: string;
   }) => { success: boolean; error?: string };
@@ -73,7 +75,11 @@ interface StoreContextType extends StoreState {
     storage_notes?: string;
   }) => { success: boolean; donationId?: string; error?: string };
   cancelDonation: (donationId: string) => { success: boolean; error?: string };
-  createClaim: (donationId: string, message?: string) => { success: boolean; error?: string };
+  createClaim: (
+    donationId: string,
+    message?: string,
+    pickupMode?: PickupMode
+  ) => { success: boolean; error?: string };
   approveClaim: (claimId: string) => { success: boolean; error?: string };
   rejectClaim: (claimId: string) => { success: boolean; error?: string };
   cancelClaim: (claimId: string) => { success: boolean; error?: string };
@@ -83,7 +89,10 @@ interface StoreContextType extends StoreState {
     pickupPhone: string;
     plannedTime: string;
   }) => { success: boolean; trackingId?: string; error?: string };
+  acceptRunnerRun: (claimId: string) => { success: boolean; trackingId?: string; error?: string };
+  regenerateHandoverOtp: (trackingId: string) => { success: boolean; code?: string; error?: string };
   updateReceiverLocation: (trackingId: string, lat: number, lng: number) => void;
+  updateCurrentLocation: (lat: number, lng: number) => void;
   verifyHandover: (trackingId: string, code: string) => {
     success: boolean;
     isLocked?: boolean;
@@ -105,7 +114,7 @@ interface StoreContextType extends StoreState {
   triggerMockRequestToast: (donationId?: string) => void;
 }
 
-const STORAGE_KEY = 'foodsaver_app_state_v2';
+const STORAGE_KEY = 'foodsaver_app_state_v3';
 
 const StoreContext = createContext<StoreContextType | null>(null);
 
@@ -213,7 +222,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     email: string;
     phone_number: string;
     organization_name?: string;
-    role: 'DONOR' | 'RECEIVER';
+    role: 'DONOR' | 'RECEIVER' | 'RUNNER';
     address: string;
     city: string;
   }) => {
@@ -380,7 +389,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return { success: true };
   };
 
-  const createClaim = (donationId: string, message?: string) => {
+  const createClaim = (donationId: string, message?: string, pickupMode: PickupMode = 'SELF') => {
     if (!state.currentUser) {
       return { success: false, error: 'Please sign in to claim food.' };
     }
@@ -417,16 +426,22 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       receiver_phone: state.currentUser.phone_number,
       request_message: message?.trim() || undefined,
       status: 'PENDING',
+      pickup_mode: pickupMode,
       requested_at: new Date().toISOString(),
     };
+
+    const runnerNote =
+      pickupMode === 'RUNNER'
+        ? ' They also requested a Rescue Runner for collection and delivery.'
+        : '';
 
     const newNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
       user_id: donation.donor_id,
-      title: 'New Claim Received',
+      title: pickupMode === 'RUNNER' ? 'New Claim + Runner Request' : 'New Claim Received',
       message: `${state.currentUser.full_name}${
         state.currentUser.organization_name ? ` (${state.currentUser.organization_name})` : ''
-      } requested "${donation.title}".`,
+      } requested "${donation.title}".${runnerNote}`,
       type: 'CLAIM_RECEIVED',
       link_type: 'claims',
       link_id: donation.id,
@@ -456,10 +471,13 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     // Toast notification system replacing modal-only notifications:
     // 1) Feedback toast confirming claim submission
     addToast({
-      title: 'Claim Request Submitted!',
-      message: `Your request for "${donation.title}" was submitted to ${donation.donor_org || donation.donor_name}.`,
+      title: pickupMode === 'RUNNER' ? 'Claim + Runner Request Submitted!' : 'Claim Request Submitted!',
+      message:
+        pickupMode === 'RUNNER'
+          ? `Your request for "${donation.title}" was sent to ${donation.donor_org || donation.donor_name}. Once approved, a Rescue Runner can accept the collection.`
+          : `Your request for "${donation.title}" was submitted to ${donation.donor_org || donation.donor_name}.`,
       type: 'success',
-      durationMs: 5000,
+      durationMs: 6000,
     });
 
     // 2) Live mock notification simulating the incoming claim alert on the donor side
@@ -503,18 +521,43 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     // Build notifications for approved receiver & auto-rejected competing receivers
     const newNotifications: NotificationItem[] = [];
 
+    const needsRunner = claim.pickup_mode === 'RUNNER';
+
     // Notification for winner
     newNotifications.push({
       id: `notif-${Date.now()}-win`,
       user_id: claim.receiver_id,
       title: 'Claim Approved! 🎉',
-      message: `${state.currentUser.full_name} approved your claim for "${donation.title}". You can now start pickup.`,
+      message: needsRunner
+        ? `${state.currentUser.full_name} approved your claim for "${donation.title}". We are matching a Rescue Runner to collect and deliver it.`
+        : `${state.currentUser.full_name} approved your claim for "${donation.title}". Start pickup when you are ready to collect.`,
       type: 'CLAIM_APPROVED',
       link_type: 'requests',
       link_id: claim.id,
       is_read: false,
       created_at: new Date().toISOString(),
     });
+
+    // A runner-mode claim becomes an open dispatch job for every Rescue Runner.
+    if (needsRunner) {
+      state.users
+        .filter((u) => u.role === 'RUNNER' && u.is_active)
+        .forEach((runner) => {
+          newNotifications.push({
+            id: `notif-${Date.now()}-runner-${runner.id}`,
+            user_id: runner.id,
+            title: 'New Rescue Run Available',
+            message: `A receiver needs a Rescue Runner for "${donation.title}" from ${
+              donation.donor_org || donation.donor_name
+            }.`,
+            type: 'RUNNER_JOB_AVAILABLE',
+            link_type: 'runner',
+            link_id: claim.id,
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        });
+    }
 
     // Notifications for auto-rejected competitors
     arbitration.autoRejectedClaimIds?.forEach((rejId, idx) => {
@@ -544,37 +587,12 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const updatedClaimsMap = new Map(arbitration.updatedClaims!.map((c) => [c.id, c]));
       const newClaims = prev.claims.map((c) => (updatedClaimsMap.has(c.id) ? updatedClaimsMap.get(c.id)! : c));
 
-      // Generate tracking record with 6-digit code right away upon approval if not already created
-      const existingTracking = prev.trackingRecords.find((t) => t.donation_request_id === claim.id);
-      let updatedTrackingRecords = prev.trackingRecords;
-      if (!existingTracking) {
-        const initialTracking: PickupTracking = {
-          id: `trk-${Date.now()}`,
-          donation_request_id: claim.id,
-          donation_id: donation.id,
-          receiver_id: claim.receiver_id,
-          donor_id: donation.donor_id,
-          pickup_person_name: claim.receiver_name,
-          pickup_phone: claim.receiver_phone,
-          planned_pickup_time: 'Ready for collection',
-          verification_code: generateHandoverCode(),
-          verification_attempts: 0,
-          max_attempts: 5,
-          is_locked: false,
-          pickup_status: 'EN_ROUTE',
-          receiver_latitude: 37.765,
-          receiver_longitude: -122.418,
-          last_location_update: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-        };
-        updatedTrackingRecords = [initialTracking, ...prev.trackingRecords];
-      }
-
+      // Deliberately do NOT issue the handover OTP here. The code is generated only
+      // when collection actually starts, so it is fresh and single-use at handover time.
       return {
         ...prev,
         donations: newDonations,
         claims: newClaims,
-        trackingRecords: updatedTrackingRecords,
         notifications: [...newNotifications, ...prev.notifications],
         auditLogs: [
           {
@@ -637,7 +655,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const wasApproved = claim.status === 'APPROVED';
 
     setState((prev) => {
-      const updatedClaims = prev.claims.map((c) => (c.id === claimId ? { ...c, status: 'CANCELLED' as const } : c));
+      const updatedClaims = prev.claims.map((c) =>
+        c.id === claimId
+          ? { ...c, status: 'CANCELLED' as const, runner_id: undefined, runner_name: undefined }
+          : c
+      );
       let updatedDonations = prev.donations;
 
       // If approved claim cancelled, release donation back to AVAILABLE
@@ -647,10 +669,22 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         );
       }
 
+      // Kill any issued OTP and stop an in-progress tracking record.
+      const updatedTracking = prev.trackingRecords.map((t) =>
+        t.donation_request_id === claimId && t.pickup_status === 'EN_ROUTE'
+          ? {
+              ...t,
+              pickup_status: 'CANCELLED' as const,
+              otp_consumed_at: new Date().toISOString(),
+            }
+          : t
+      );
+
       return {
         ...prev,
         claims: updatedClaims,
         donations: updatedDonations,
+        trackingRecords: updatedTracking,
       };
     });
 
@@ -672,6 +706,12 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (claim.status !== 'APPROVED') {
       return { success: false, error: `Claim is not approved (currently ${claim.status.toLowerCase()})` };
     }
+    if (claim.pickup_mode === 'RUNNER') {
+      return {
+        success: false,
+        error: 'This rescue is assigned to a Rescue Runner. The runner will start pickup and receive the one-time code.',
+      };
+    }
 
     const donation = state.donations.find((d) => d.id === claim.donation_id);
     if (!donation) return { success: false, error: 'Donation not found' };
@@ -682,7 +722,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return { success: true, trackingId: existing.id };
     }
 
-    // Generate secure 6-digit code
+    // Generate a fresh single-use 6-digit OTP for this pickup.
+    const now = new Date();
     const verificationCode = generateHandoverCode();
 
     const newTracking: PickupTracking = {
@@ -698,11 +739,14 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       verification_attempts: 0,
       max_attempts: 5,
       is_locked: false,
+      otp_holder_id: state.currentUser.id,
+      otp_issued_at: now.toISOString(),
+      otp_expires_at: getOtpExpiryIso(now.getTime()),
       pickup_status: 'EN_ROUTE',
       receiver_latitude: state.currentUser.latitude || 37.765,
       receiver_longitude: state.currentUser.longitude || -122.418,
-      last_location_update: new Date().toISOString(),
-      created_at: new Date().toISOString(),
+      last_location_update: now.toISOString(),
+      created_at: now.toISOString(),
     };
 
     const notif: NotificationItem = {
@@ -729,7 +773,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           action: 'PICKUP_STARTED',
           target_type: 'PICKUP_TRACKING',
           target_id: newTracking.id,
-          details: `Receiver started transit for donation ${donation.id}. Code issued.`,
+          details: `Receiver started transit for donation ${donation.id}. Single-use handover OTP issued.`,
           created_at: new Date().toISOString(),
         },
         ...prev.auditLogs,
@@ -737,6 +781,179 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }));
 
     return { success: true, trackingId: newTracking.id };
+  };
+
+  /**
+   * A Rescue Runner accepts an approved runner-mode claim. Accepting the run
+   * creates the tracking record and issues the single-use OTP to the runner.
+   */
+  const acceptRunnerRun = (claimId: string) => {
+    if (!state.currentUser) return { success: false, error: 'Unauthenticated' };
+    if (state.currentUser.role !== 'RUNNER') {
+      return { success: false, error: 'Only Rescue Runners can accept dispatch runs.' };
+    }
+    if (!state.currentUser.is_active) {
+      return { success: false, error: 'Your Rescue Runner account is suspended.' };
+    }
+
+    const claim = state.claims.find((c) => c.id === claimId);
+    if (!claim) return { success: false, error: 'Run request not found' };
+    if (claim.status !== 'APPROVED') {
+      return { success: false, error: 'This run is not approved yet.' };
+    }
+    if (claim.pickup_mode !== 'RUNNER') {
+      return { success: false, error: 'This receiver is collecting the food themselves.' };
+    }
+    if (claim.runner_id && claim.runner_id !== state.currentUser.id) {
+      return { success: false, error: 'Another Rescue Runner has already accepted this run.' };
+    }
+
+    const donation = state.donations.find((d) => d.id === claim.donation_id);
+    if (!donation) return { success: false, error: 'Donation not found' };
+
+    const existing = state.trackingRecords.find((t) => t.donation_request_id === claim.id);
+    if (existing) {
+      return { success: true, trackingId: existing.id };
+    }
+
+    const now = new Date();
+    const newTracking: PickupTracking = {
+      id: `trk-${Date.now()}`,
+      donation_request_id: claim.id,
+      donation_id: donation.id,
+      receiver_id: claim.receiver_id,
+      donor_id: donation.donor_id,
+      pickup_person_name: state.currentUser.full_name,
+      pickup_phone: state.currentUser.phone_number,
+      planned_pickup_time: 'Runner en route',
+      verification_code: generateHandoverCode(),
+      verification_attempts: 0,
+      max_attempts: 5,
+      is_locked: false,
+      otp_holder_id: state.currentUser.id,
+      otp_issued_at: now.toISOString(),
+      otp_expires_at: getOtpExpiryIso(now.getTime()),
+      pickup_status: 'EN_ROUTE',
+      receiver_latitude: state.currentUser.latitude || 37.765,
+      receiver_longitude: state.currentUser.longitude || -122.418,
+      last_location_update: now.toISOString(),
+      created_at: now.toISOString(),
+    };
+
+    const notifications: NotificationItem[] = [
+      {
+        id: `notif-${Date.now()}-runner-assigned`,
+        user_id: claim.receiver_id,
+        title: 'Rescue Runner Assigned 🛵',
+        message: `${state.currentUser.full_name} is collecting "${donation.title}" from ${
+          donation.donor_org || donation.donor_name
+        } and delivering it to you.`,
+        type: 'RUNNER_ASSIGNED',
+        link_type: 'tracking',
+        link_id: newTracking.id,
+        is_read: false,
+        created_at: now.toISOString(),
+      },
+      {
+        id: `notif-${Date.now()}-runner-enroute`,
+        user_id: donation.donor_id,
+        title: 'Rescue Runner En Route',
+        message: `${state.currentUser.full_name} accepted the rescue run for "${donation.title}" on behalf of ${
+          claim.receiver_org || claim.receiver_name
+        }.`,
+        type: 'PICKUP_STARTED',
+        link_type: 'tracking',
+        link_id: newTracking.id,
+        is_read: false,
+        created_at: now.toISOString(),
+      },
+    ];
+
+    setState((prev) => ({
+      ...prev,
+      claims: prev.claims.map((c) =>
+        c.id === claim.id
+          ? {
+              ...c,
+              runner_id: state.currentUser!.id,
+              runner_name: state.currentUser!.full_name,
+              runner_phone: state.currentUser!.phone_number,
+              runner_assigned_at: now.toISOString(),
+            }
+          : c
+      ),
+      trackingRecords: [newTracking, ...prev.trackingRecords],
+      notifications: [...notifications, ...prev.notifications],
+      auditLogs: [
+        {
+          id: `audit-${Date.now()}`,
+          actor_id: state.currentUser!.id,
+          actor_name: state.currentUser!.full_name,
+          action: 'RUNNER_RUN_ACCEPTED',
+          target_type: 'PICKUP_TRACKING',
+          target_id: newTracking.id,
+          details: `Rescue Runner accepted claim ${claim.id}. Single-use handover OTP issued to runner.`,
+          created_at: now.toISOString(),
+        },
+        ...prev.auditLogs,
+      ],
+    }));
+
+    return { success: true, trackingId: newTracking.id };
+  };
+
+  /**
+   * Rotates the handover OTP. Only the current OTP holder may do this, and a
+   * locked record cannot bypass the attempt limit by requesting a new code.
+   */
+  const regenerateHandoverOtp = (trackingId: string) => {
+    if (!state.currentUser) return { success: false, error: 'Unauthenticated' };
+    const tracking = state.trackingRecords.find((t) => t.id === trackingId);
+    if (!tracking) return { success: false, error: 'Tracking record not found' };
+    if (tracking.pickup_status !== 'EN_ROUTE') {
+      return { success: false, error: 'A new code can only be issued while the pickup is en route.' };
+    }
+    if (tracking.is_locked) {
+      return { success: false, error: 'This handover is locked after too many incorrect attempts.' };
+    }
+    if (tracking.otp_holder_id && tracking.otp_holder_id !== state.currentUser.id) {
+      return { success: false, error: 'Only the receiver or assigned Rescue Runner can refresh this code.' };
+    }
+
+    const now = new Date();
+    const code = generateHandoverCode();
+
+    setState((prev) => ({
+      ...prev,
+      trackingRecords: prev.trackingRecords.map((t) =>
+        t.id === trackingId
+          ? {
+              ...t,
+              verification_code: code,
+              verification_attempts: 0,
+              is_locked: false,
+              otp_issued_at: now.toISOString(),
+              otp_expires_at: getOtpExpiryIso(now.getTime()),
+              otp_consumed_at: undefined,
+            }
+          : t
+      ),
+      auditLogs: [
+        {
+          id: `audit-${Date.now()}`,
+          actor_id: prev.currentUser!.id,
+          actor_name: prev.currentUser!.full_name,
+          action: 'HANDOVER_OTP_ROTATED',
+          target_type: 'PICKUP_TRACKING',
+          target_id: trackingId,
+          details: 'Issued a fresh single-use handover OTP. Previous code is now invalid.',
+          created_at: now.toISOString(),
+        },
+        ...prev.auditLogs,
+      ],
+    }));
+
+    return { success: true, code };
   };
 
   const updateReceiverLocation = (trackingId: string, lat: number, lng: number) => {
@@ -753,6 +970,23 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           : t
       ),
     }));
+  };
+
+  /**
+   * Persists the device's precise coordinates onto the signed-in profile so
+   * distances, the radius circle, and map centering all use the real location.
+   */
+  const updateCurrentLocation = (lat: number, lng: number) => {
+    setState((prev) => {
+      if (!prev.currentUser) return prev;
+      return {
+        ...prev,
+        currentUser: { ...prev.currentUser, latitude: lat, longitude: lng },
+        users: prev.users.map((u) =>
+          u.id === prev.currentUser!.id ? { ...u, latitude: lat, longitude: lng } : u
+        ),
+      };
+    });
   };
 
   const verifyHandover = (trackingOrDonationId: string, enteredCode: string) => {
@@ -774,6 +1008,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       maxAttempts: tracking.max_attempts,
       trackingStatus: tracking.pickup_status,
       isLocked: tracking.is_locked,
+      otpExpiresAt: tracking.otp_expires_at,
+      otpConsumedAt: tracking.otp_consumed_at,
     });
 
     if (!verificationResult.success) {
@@ -817,7 +1053,14 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setState((prev) => ({
       ...prev,
       trackingRecords: prev.trackingRecords.map((t) =>
-        t.id === tracking.id ? { ...t, pickup_status: 'VERIFIED' as const } : t
+        t.id === tracking.id
+          ? {
+              ...t,
+              pickup_status: 'VERIFIED' as const,
+              // Consuming the OTP is what makes it one-time. The same digits can never verify again.
+              otp_consumed_at: new Date().toISOString(),
+            }
+          : t
       ),
       claims: prev.claims.map((c) =>
         c.id === tracking.donation_request_id ? { ...c, status: 'COMPLETED' as const, completed_at: new Date().toISOString() } : c
@@ -837,6 +1080,21 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           is_read: false,
           created_at: new Date().toISOString(),
         },
+        ...(tracking.otp_holder_id && tracking.otp_holder_id !== tracking.receiver_id
+          ? [
+              {
+                id: `notif-${Date.now()}-runner-done`,
+                user_id: tracking.otp_holder_id,
+                title: 'Rescue Delivered & Verified 🎉',
+                message: `The donor verified the one-time code for "${donation?.title || 'Food Donation'}". Your rescue run is complete.`,
+                type: 'PICKUP_VERIFIED' as const,
+                link_type: 'runner' as const,
+                link_id: tracking.donation_request_id,
+                is_read: false,
+                created_at: new Date().toISOString(),
+              },
+            ]
+          : []),
         ...prev.notifications,
       ],
       auditLogs: [
@@ -847,7 +1105,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           action: 'HANDOVER_VERIFIED',
           target_type: 'DONATION',
           target_id: tracking.donation_id,
-          details: `Verified 6-digit code. Claim completed and donation marked PICKED_UP.`,
+          details: `Verified single-use 6-digit OTP. Code consumed, claim completed, donation marked PICKED_UP.`,
           created_at: new Date().toISOString(),
         },
         ...prev.auditLogs,
@@ -1000,7 +1258,10 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         rejectClaim,
         cancelClaim,
         startPickup,
+        acceptRunnerRun,
+        regenerateHandoverOtp,
         updateReceiverLocation,
+        updateCurrentLocation,
         verifyHandover,
         sendMessage,
         markNotificationRead,

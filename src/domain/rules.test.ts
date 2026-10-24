@@ -7,6 +7,9 @@ import {
   arbitrateClaimApproval,
   verifyHandoverCode,
   generateHandoverCode,
+  getOtpExpiryIso,
+  isOtpExpired,
+  OTP_VALIDITY_MINUTES,
   type ClaimStatus,
   type DonationStatus,
 } from './rules.ts';
@@ -163,6 +166,46 @@ test('verifyHandoverCode validates match and increments attempts with lockout', 
   assert.equal(lockRes.newAttempts, 3);
   assert.equal(lockRes.remainingAttempts, 0);
   assert.equal(lockRes.isLocked, true);
+});
+
+test('verifyHandoverCode rejects a consumed one-time code even when the digits match', () => {
+  const res = verifyHandoverCode({
+    enteredCode: '482910',
+    expectedCode: '482910',
+    currentAttempts: 0,
+    trackingStatus: 'EN_ROUTE',
+    otpConsumedAt: new Date().toISOString(),
+  });
+
+  assert.equal(res.success, false);
+  assert.equal(res.isLocked, false);
+  assert.equal(res.newAttempts, 0);
+  assert.ok(res.error?.includes('USED'));
+});
+
+test('verifyHandoverCode rejects an expired OTP without consuming an attempt', () => {
+  const now = 1700000000000;
+  const res = verifyHandoverCode({
+    enteredCode: '482910',
+    expectedCode: '482910',
+    currentAttempts: 1,
+    trackingStatus: 'EN_ROUTE',
+    otpExpiresAt: new Date(now - 1000).toISOString(),
+    currentTimeMs: now,
+  });
+
+  assert.equal(res.success, false);
+  assert.equal(res.newAttempts, 1);
+  assert.ok(res.error?.includes('EXPIRED_OTP'));
+});
+
+test('getOtpExpiryIso issues a timestamp exactly OTP_VALIDITY_MINUTES ahead', () => {
+  const now = 1700000000000;
+  const expiry = getOtpExpiryIso(now);
+  assert.equal(new Date(expiry).getTime(), now + OTP_VALIDITY_MINUTES * 60 * 1000);
+  assert.equal(isOtpExpired(expiry, now), false);
+  assert.equal(isOtpExpired(expiry, now + OTP_VALIDITY_MINUTES * 60 * 1000), true);
+  assert.equal(isOtpExpired(undefined, now), false);
 });
 
 test('mock notification system builds valid toast payloads for receiver claims', () => {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useStore } from '../domain/store.tsx';
 import { X, Bell, CheckCheck } from 'lucide-react';
+import { ModalShell } from './ModalShell.tsx';
 
 interface NotificationsModalProps {
   onClose: () => void;
@@ -16,13 +17,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const myNotifications = notifications.filter((n) => n.user_id === currentUser?.id);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="notif-title"
-    >
-      <div className="relative w-full max-w-lg bg-white rounded-3xl border border-[#E8DEC9] shadow-2xl p-6 my-8">
+    <ModalShell onClose={onClose} labelledBy="notif-title" maxWidth="max-w-lg" panelClassName="p-6">
         {/* Header with clean flex alignment so Mark All Read and Close never collide */}
         <div className="flex items-center justify-between pb-3.5 border-b border-[#E8DEC9]">
           <div className="flex items-center gap-2.5">
@@ -100,8 +95,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           )}
         </div>
 
-        {/* Footer Actions: simulate toast & close */}
-        <div className="mt-5 pt-3 border-t border-[#E8DEC9] flex items-center justify-between gap-3">
+        {/* Footer action: one close affordance lives in the header (the X). */}
+        <div className="mt-5 pt-3 border-t border-[#E8DEC9] flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             onClick={() => {
@@ -112,15 +107,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           >
             <span>Simulate Request Toast</span>
           </button>
-
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold rounded-xl bg-[#FAF7F2] hover:bg-[#F3ECE1] text-[#4E4035] hover:text-[#1E1611] border border-[#E8DEC9] transition-colors"
-          >
-            Close
-          </button>
+          <span className="text-[10px] text-[#7E7063]">Press Esc or the × above to close</span>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };

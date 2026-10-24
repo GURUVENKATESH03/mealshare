@@ -3,7 +3,7 @@
  * Strict adherence to the FoodSaver Specification v2.0
  */
 
-export type Role = 'DONOR' | 'RECEIVER' | 'ADMIN';
+export type Role = 'DONOR' | 'RECEIVER' | 'RUNNER' | 'ADMIN';
 
 export type DonationStatus = 'AVAILABLE' | 'RESERVED' | 'PICKED_UP' | 'EXPIRED' | 'CANCELLED';
 
@@ -78,6 +78,9 @@ export function getExpiryRemaining(expiryIso: string, referenceTimeMs: number = 
   return { isExpired: false, isUrgent: true, label: `${minutes}m left` };
 }
 
+/** How long an issued handover OTP remains valid before a fresh one must be requested. */
+export const OTP_VALIDITY_MINUTES = 30;
+
 /**
  * Secure 6-digit verification code generation
  */
@@ -85,6 +88,19 @@ export function generateHandoverCode(): string {
   // Generates 6 digits between 100000 and 999999
   const num = Math.floor(100000 + Math.random() * 900000);
   return num.toString();
+}
+
+/** Builds the expiry timestamp for a newly issued handover OTP. */
+export function getOtpExpiryIso(fromMs: number = Date.now(), validityMinutes = OTP_VALIDITY_MINUTES): string {
+  return new Date(fromMs + validityMinutes * 60 * 1000).toISOString();
+}
+
+/** Returns true when an OTP has passed its expiry timestamp. */
+export function isOtpExpired(expiryIso?: string, referenceTimeMs: number = Date.now()): boolean {
+  if (!expiryIso) return false;
+  const expiryMs = new Date(expiryIso).getTime();
+  if (isNaN(expiryMs)) return false;
+  return expiryMs <= referenceTimeMs;
 }
 
 /**
@@ -175,6 +191,9 @@ export function verifyHandoverCode(params: {
   maxAttempts?: number;
   trackingStatus: TrackingStatus;
   isLocked?: boolean;
+  otpExpiresAt?: string;
+  otpConsumedAt?: string;
+  currentTimeMs?: number;
 }): {
   success: boolean;
   isLocked: boolean;
@@ -182,7 +201,29 @@ export function verifyHandoverCode(params: {
   remainingAttempts: number;
   error?: string;
 } {
-  const { enteredCode, expectedCode, currentAttempts, maxAttempts = 5, trackingStatus, isLocked = false } = params;
+  const {
+    enteredCode,
+    expectedCode,
+    currentAttempts,
+    maxAttempts = 5,
+    trackingStatus,
+    isLocked = false,
+    otpExpiresAt,
+    otpConsumedAt,
+    currentTimeMs = Date.now(),
+  } = params;
+
+  // A consumed OTP is permanently dead. This is the core one-time-use guarantee:
+  // replaying the same code after a successful handover must never succeed.
+  if (otpConsumedAt) {
+    return {
+      success: false,
+      isLocked: false,
+      newAttempts: currentAttempts,
+      remainingAttempts: Math.max(0, maxAttempts - currentAttempts),
+      error: 'USED: This one-time handover code has already been used.',
+    };
+  }
 
   if (isLocked || currentAttempts >= maxAttempts) {
     return {
@@ -201,6 +242,16 @@ export function verifyHandoverCode(params: {
       newAttempts: currentAttempts,
       remainingAttempts: Math.max(0, maxAttempts - currentAttempts),
       error: `INVALID_STATE: Pickup is currently ${trackingStatus.toLowerCase()}`,
+    };
+  }
+
+  if (isOtpExpired(otpExpiresAt, currentTimeMs)) {
+    return {
+      success: false,
+      isLocked: false,
+      newAttempts: currentAttempts,
+      remainingAttempts: Math.max(0, maxAttempts - currentAttempts),
+      error: 'EXPIRED_OTP: This one-time code has expired. Ask the receiver or Rescue Runner for a fresh code.',
     };
   }
 

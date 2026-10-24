@@ -1,9 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { Donation, PickupTracking } from '../types/index.ts';
 import { useStore } from '../domain/store.tsx';
 import { calculateDistanceKm, getExpiryRemaining } from '../domain/rules.ts';
-import { Filter, Layers, Navigation } from 'lucide-react';
+import {
+  Filter,
+  Navigation,
+  LocateFixed,
+  Loader2,
+  MapPin,
+  AlertTriangle,
+  RefreshCw,
+} from 'lucide-react';
+
+type GeoStatus = 'idle' | 'requesting' | 'granted' | 'denied' | 'error' | 'unsupported';
 
 interface MapViewProps {
   onSelectDonation: (donation: Donation) => void;
@@ -16,13 +26,63 @@ export const MapView: React.FC<MapViewProps> = ({ onSelectDonation, activeTracki
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const circleLayerRef = useRef<L.Circle | null>(null);
 
-  const { currentUser, donations, categories } = useStore();
+  const { currentUser, donations, categories, updateCurrentLocation } = useStore();
   const [selectedRadiusKm, setSelectedRadiusKm] = useState<number>(10);
   const [filterCategoryId, setFilterCategoryId] = useState<string>('all');
+  const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle');
+  const [usingDeviceLocation, setUsingDeviceLocation] = useState(false);
+  const [locationMessage, setLocationMessage] = useState<string | null>(null);
+  const previousUserIdRef = useRef(currentUser?.id);
 
-  // Default coordinate: user's location or downtown SF
+  // Default coordinate: user's saved profile location or downtown SF
   const userLat = currentUser?.latitude || 37.7749;
   const userLng = currentUser?.longitude || -122.4194;
+
+  const requestLocation = useCallback(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGeoStatus('unsupported');
+      setLocationMessage('This browser does not support precise location. Showing your saved profile location.');
+      return;
+    }
+
+    setGeoStatus('requesting');
+    setLocationMessage(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        updateCurrentLocation(position.coords.latitude, position.coords.longitude);
+        setUsingDeviceLocation(true);
+        setGeoStatus('granted');
+      },
+      (error) => {
+        setUsingDeviceLocation(false);
+        setGeoStatus(error.code === error.PERMISSION_DENIED ? 'denied' : 'error');
+        setLocationMessage(
+          error.code === error.PERMISSION_DENIED
+            ? 'Location permission is blocked. Allow location for this site in your browser settings, then try again.'
+            : 'We could not get a precise fix. Showing your saved profile location instead.'
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }, [updateCurrentLocation]);
+
+  // Ask for location as soon as the Live Map opens. If the browser has already
+  // granted permission this resolves silently; if not, the native prompt appears.
+  useEffect(() => {
+    requestLocation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Switching demo personas should not keep claiming the previous device fix.
+  useEffect(() => {
+    if (previousUserIdRef.current !== currentUser?.id) {
+      previousUserIdRef.current = currentUser?.id;
+      setUsingDeviceLocation(false);
+      setGeoStatus('idle');
+      setLocationMessage(null);
+    }
+  }, [currentUser?.id]);
 
   // Initialize Map
   useEffect(() => {
@@ -51,6 +111,14 @@ export const MapView: React.FC<MapViewProps> = ({ onSelectDonation, activeTracki
       mapInstanceRef.current = null;
     };
   }, []);
+
+  // Re-center once a real device fix arrives (the map is created before the
+  // browser resolves the geolocation promise).
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !usingDeviceLocation) return;
+    map.setView([userLat, userLng], Math.max(map.getZoom(), 13));
+  }, [userLat, userLng, usingDeviceLocation]);
 
   // Update Markers & Radius Circle
   useEffect(() => {
@@ -226,7 +294,7 @@ export const MapView: React.FC<MapViewProps> = ({ onSelectDonation, activeTracki
   }, [donations, selectedRadiusKm, filterCategoryId, userLat, userLng, activeTracking]);
 
   return (
-    <div className="relative w-full h-[calc(100vh-140px)] min-h-[500px] rounded-2xl overflow-hidden border border-[#E8DEC9] bg-[#FAF7F2]">
+    <div className="relative isolate w-full h-[calc(100vh-140px)] min-h-[500px] rounded-2xl overflow-hidden border border-[#E8DEC9] bg-[#FAF7F2]">
       {/* Floating Radius & Category Filter Bar */}
       <div className="absolute top-4 left-4 z-[1000] bg-white/95 backdrop-blur-md p-3 rounded-xl border border-[#E8DEC9] shadow-md flex flex-wrap items-center gap-3">
         {/* Radius selector */}
@@ -264,7 +332,81 @@ export const MapView: React.FC<MapViewProps> = ({ onSelectDonation, activeTracki
             ))}
           </select>
         </div>
+
+        <div className="h-4 w-px bg-[#E8DEC9]" />
+
+        {/* Explicit location permission / refresh control */}
+        <button
+          type="button"
+          onClick={requestLocation}
+          disabled={geoStatus === 'requesting'}
+          className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-md transition-colors ${
+            usingDeviceLocation
+              ? 'text-[#2D6A4F] bg-[#E8F5EE]'
+              : 'text-[#4E4035] bg-[#FAF7F2] hover:bg-[#F3ECE1]'
+          }`}
+          title="Use my precise location"
+        >
+          {geoStatus === 'requesting' ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : usingDeviceLocation ? (
+            <MapPin className="w-3.5 h-3.5" />
+          ) : (
+            <LocateFixed className="w-3.5 h-3.5" />
+          )}
+          <span>{usingDeviceLocation ? 'Live location' : 'Use my location'}</span>
+        </button>
       </div>
+
+      {/* Location status card (bottom-left, away from map zoom controls) */}
+      {usingDeviceLocation ? (
+        <div className="absolute bottom-4 left-4 z-[1000] bg-white/95 backdrop-blur-md px-3 py-2 rounded-xl border border-[#2D6A4F]/30 shadow-md flex items-center gap-2 text-[11px] text-[#2D6A4F] font-semibold">
+          <MapPin className="w-3.5 h-3.5" />
+          Using your live device location
+          <button
+            type="button"
+            onClick={requestLocation}
+            className="p-1 rounded-md hover:bg-[#E8F5EE]"
+            aria-label="Refresh location"
+          >
+            <RefreshCw className="w-3 h-3" />
+          </button>
+        </div>
+      ) : (
+        <div className="absolute bottom-4 left-4 z-[1000] w-[min(20rem,calc(100%-2rem))] bg-white/95 backdrop-blur-md p-3 rounded-xl border border-[#E8DEC9] shadow-md">
+          <div className="flex items-start gap-2">
+            <span className="w-7 h-7 rounded-lg bg-[#D97706]/10 text-[#D97706] flex items-center justify-center shrink-0">
+              {geoStatus === 'requesting' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : geoStatus === 'denied' || geoStatus === 'error' || geoStatus === 'unsupported' ? (
+                <AlertTriangle className="w-4 h-4" />
+              ) : (
+                <LocateFixed className="w-4 h-4" />
+              )}
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-[#1E1611]">
+                {geoStatus === 'requesting'
+                  ? 'Requesting your location…'
+                  : 'Showing your saved profile location'}
+              </p>
+              <p className="text-[11px] text-[#7E7063] mt-0.5 leading-relaxed">
+                {locationMessage ||
+                  'Allow precise location so the map centers on you and distances are accurate.'}
+              </p>
+              {geoStatus !== 'requesting' && (
+                <button
+                  type="button"
+                  onClick={requestLocation}
+                  className="mt-2 px-2.5 py-1 rounded-lg bg-[#2D6A4F] hover:bg-[#1B4332] text-white text-[11px] font-semibold"
+                >
+                  {geoStatus === 'denied' ? 'Try again' : 'Enable location'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Map Element */}
       <div ref={mapContainerRef} className="w-full h-full" style={{ zIndex: 1 }} />
