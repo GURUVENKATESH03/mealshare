@@ -1,8 +1,15 @@
-export type Role = 'DONOR' | 'RECEIVER' | 'ADMIN';
+export type Role = 'DONOR' | 'RECEIVER' | 'RUNNER' | 'ADMIN';
 
 export type DonationStatus = 'AVAILABLE' | 'RESERVED' | 'PICKED_UP' | 'EXPIRED' | 'CANCELLED';
 
 export type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'CANCELLED';
+
+/**
+ * How a receiver intends to collect an approved claim.
+ * SELF   - the receiver collects the food in person
+ * RUNNER - a Rescue Runner collects and delivers it on the receiver's behalf
+ */
+export type PickupMode = 'SELF' | 'RUNNER';
 
 export type TrackingStatus = 'PENDING' | 'EN_ROUTE' | 'VERIFIED' | 'CANCELLED';
 
@@ -66,6 +73,12 @@ export interface DonationRequest {
   receiver_phone: string;
   request_message?: string;
   status: ClaimStatus;
+  /** Self collection or a dispatched Rescue Runner. Defaults to SELF for older records. */
+  pickup_mode?: PickupMode;
+  runner_id?: string;
+  runner_name?: string;
+  runner_phone?: string;
+  runner_assigned_at?: string;
   requested_at: string;
   approved_at?: string;
   rejected_at?: string;
@@ -81,10 +94,16 @@ export interface PickupTracking {
   pickup_person_name: string;
   pickup_phone: string;
   planned_pickup_time: string;
-  verification_code: string; // Private six-digit code
+  verification_code: string; // Private, single-use six-digit OTP
   verification_attempts: number;
   max_attempts: number;
   is_locked: boolean;
+  /** User who is allowed to read/show the one-time code (receiver or assigned runner). */
+  otp_holder_id?: string;
+  otp_issued_at?: string;
+  otp_expires_at?: string;
+  /** Set the instant a code is successfully verified. A consumed code can never be reused. */
+  otp_consumed_at?: string;
   pickup_status: TrackingStatus;
   receiver_latitude?: number;
   receiver_longitude?: number;
@@ -124,8 +143,10 @@ export interface NotificationItem {
     | 'PICKUP_STARTED'
     | 'PICKUP_VERIFIED'
     | 'PICKUP_CANCELLED'
-    | 'DONATION_EXPIRED';
-  link_type?: 'donation' | 'tracking' | 'requests' | 'claims';
+    | 'DONATION_EXPIRED'
+    | 'RUNNER_JOB_AVAILABLE'
+    | 'RUNNER_ASSIGNED';
+  link_type?: 'donation' | 'tracking' | 'requests' | 'claims' | 'runner';
   link_id?: string;
   is_read: boolean;
   created_at: string;

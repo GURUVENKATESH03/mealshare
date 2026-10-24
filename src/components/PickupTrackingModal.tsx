@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../domain/store.tsx';
+import { isOtpExpired } from '../domain/rules.ts';
+import { ModalShell } from './ModalShell.tsx';
 import {
   X,
   ShieldCheck,
@@ -11,6 +13,8 @@ import {
   AlertTriangle,
   Navigation,
   RefreshCw,
+  KeyRound,
+  Bike,
 } from 'lucide-react';
 
 interface PickupTrackingModalProps {
@@ -22,13 +26,21 @@ export const PickupTrackingModal: React.FC<PickupTrackingModalProps> = ({
   trackingId,
   onClose,
 }) => {
-  const { currentUser, trackingRecords, donations, claims, verifyHandover, updateReceiverLocation } =
-    useStore();
+  const {
+    currentUser,
+    trackingRecords,
+    donations,
+    claims,
+    verifyHandover,
+    updateReceiverLocation,
+    regenerateHandoverOtp,
+  } = useStore();
 
   const [enteredCode, setEnteredCode] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSimulatingGps, setIsSimulatingGps] = useState(false);
+  const [nowMs, setNowMs] = useState(Date.now());
 
   const tracking = trackingRecords.find((t) => t.id === trackingId);
   const donation = tracking ? donations.find((d) => d.id === tracking.donation_id) : null;
@@ -38,6 +50,18 @@ export const PickupTrackingModal: React.FC<PickupTrackingModalProps> = ({
 
   const isReceiver = currentUser?.id === tracking.receiver_id;
   const isDonor = currentUser?.id === tracking.donor_id || currentUser?.role === 'ADMIN';
+  const isRunner = currentUser?.id === tracking.otp_holder_id && currentUser?.id !== tracking.receiver_id;
+  const otpHolderId = tracking.otp_holder_id || tracking.receiver_id;
+  const isOtpHolder = currentUser?.id === otpHolderId;
+  const otpExpired = isOtpExpired(tracking.otp_expires_at, nowMs);
+  const minutesLeft = tracking.otp_expires_at
+    ? Math.max(0, Math.ceil((new Date(tracking.otp_expires_at).getTime() - nowMs) / 60000))
+    : null;
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Realistic transit GPS step simulation when receiver toggles location sharing
   useEffect(() => {
@@ -73,13 +97,12 @@ export const PickupTrackingModal: React.FC<PickupTrackingModalProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="tracking-title"
+    <ModalShell
+      onClose={onClose}
+      labelledBy="tracking-title"
+      maxWidth="max-w-xl"
+      panelClassName="p-6 sm:p-8"
     >
-      <div className="relative w-full max-w-xl bg-white rounded-3xl border border-[#E8DEC9] shadow-2xl p-6 sm:p-8 my-8">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#F3ECE1] text-[#7E7063] transition-colors"
@@ -177,25 +200,60 @@ export const PickupTrackingModal: React.FC<PickupTrackingModalProps> = ({
           </div>
         ) : (
           <>
-            {/* Receiver View: Big Code Card */}
-            {isReceiver && (
+            {/* OTP holder view: the receiver collecting themselves, or the assigned Rescue Runner */}
+            {isOtpHolder && (
               <div className="mt-6 p-6 rounded-2xl bg-[#FAF7F2] border border-[#E8DEC9] text-center">
                 <span className="text-[11px] uppercase tracking-wider font-mono text-[#D97706] font-bold block mb-1">
-                  Your Private Handover Code
+                  {isRunner ? 'Your Rescue Run Code' : 'Your Private Handover Code'}
                 </span>
                 <p className="text-xs text-[#7E7063] mb-4">
-                  Show this 6-digit code to the donor upon collecting the food:
+                  {isRunner
+                    ? 'Collect the food, then show this code to the donor to complete the handover:'
+                    : 'Show this 6-digit code to the donor upon collecting the food:'}
                 </p>
 
-                {/* Big 6-digit code badge */}
-                <div className="inline-block py-3 px-8 rounded-2xl bg-white border-2 border-[#D97706] shadow-sm">
-                  <span className="font-mono text-3xl font-extrabold tracking-widest text-[#1E1611]">
-                    {tracking.verification_code}
+                {otpExpired ? (
+                  <div className="p-4 rounded-xl bg-[#FDF0ED] border border-[#BA181B]/20 text-xs text-[#BA181B]">
+                    <p className="font-semibold">This one-time code has expired.</p>
+                    <p className="mt-0.5">Generate a fresh code before the handover.</p>
+                  </div>
+                ) : (
+                  <div className="inline-block py-3 px-8 rounded-2xl bg-white border-2 border-[#D97706] shadow-sm">
+                    <span className="font-mono text-3xl font-extrabold tracking-widest text-[#1E1611]">
+                      {tracking.verification_code}
+                    </span>
+                  </div>
+                )}
+
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-[11px] text-[#7E7063]">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-[#E8DEC9] font-mono">
+                    <KeyRound className="w-3 h-3 text-[#D97706]" />
+                    SINGLE USE
                   </span>
+                  {minutesLeft !== null && (
+                    <span className={otpExpired ? 'text-[#BA181B] font-semibold' : ''}>
+                      {otpExpired ? 'Expired' : `Valid for ${minutesLeft} more min`}
+                    </span>
+                  )}
+                  {!tracking.is_locked && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const res = regenerateHandoverOtp(tracking.id);
+                        if (!res.success) setErrorMsg(res.error || 'Could not generate a new code.');
+                        else setErrorMsg(null);
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2D6A4F] hover:text-[#1B4332] underline-offset-2 hover:underline"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      New code
+                    </button>
+                  )}
                 </div>
 
                 <p className="text-[11px] text-[#7E7063] mt-3">
-                  ⚠️ Never share this code in chat or phone; show it in person.
+                  ⚠️ This code works once and is invalidated immediately after the donor verifies it.
+                  Never share it in chat or over the phone.
                 </p>
 
                 {/* Location Sharing Simulation Toggle */}
@@ -223,6 +281,23 @@ export const PickupTrackingModal: React.FC<PickupTrackingModalProps> = ({
               </div>
             )}
 
+            {/* Receiver view when a Rescue Runner is holding the code */}
+            {isReceiver && !isOtpHolder && (
+              <div className="mt-6 p-6 rounded-2xl bg-[#EFF6FF] border border-[#2563EB]/20">
+                <div className="flex items-center gap-2 text-xs font-bold text-[#1E1611]">
+                  <Bike className="w-4 h-4 text-[#2563EB]" />
+                  Rescue Runner assigned
+                </div>
+                <p className="text-xs text-[#4E4035] mt-1.5 leading-relaxed">
+                  <strong>{tracking.pickup_person_name}</strong> is collecting this rescue and has the
+                  single-use handover code. You do not need to share any code.
+                </p>
+                <p className="text-[11px] text-[#7E7063] mt-2 font-mono">
+                  Runner contact: {tracking.pickup_phone}
+                </p>
+              </div>
+            )}
+
             {/* Donor View: Verification Input Form */}
             {isDonor && (
               <div className="mt-6 p-6 rounded-2xl bg-[#FAF7F2] border border-[#E8DEC9]">
@@ -234,7 +309,8 @@ export const PickupTrackingModal: React.FC<PickupTrackingModalProps> = ({
                 </div>
 
                 <p className="text-xs text-[#7E7063] mb-4">
-                  Ask {tracking.pickup_person_name} for their 6-digit code and enter it below to confirm collection:
+                  Ask {tracking.pickup_person_name} for their single-use 6-digit code and enter it below
+                  to confirm collection:
                 </p>
 
                 {errorMsg && (
@@ -295,7 +371,6 @@ export const PickupTrackingModal: React.FC<PickupTrackingModalProps> = ({
             </div>
           </>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 };

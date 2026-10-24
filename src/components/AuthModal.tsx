@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../domain/store.tsx';
-import { X, UserCheck, HeartHandshake, ShieldAlert } from 'lucide-react';
+import { ModalShell } from './ModalShell.tsx';
+import { X, UserCheck, HeartHandshake, ShieldAlert, Bike } from 'lucide-react';
 
 interface AuthModalProps {
   onClose: () => void;
@@ -15,8 +16,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [orgName, setOrgName] = useState('');
-  // Strictly DONOR or RECEIVER only! Spec 3.1 & 15: Public signup cannot assign ADMIN
-  const [role, setRole] = useState<'DONOR' | 'RECEIVER'>('RECEIVER');
+  // Public signup can choose Donor, Receiver, or Rescue Runner. ADMIN is never self-assignable.
+  const [role, setRole] = useState<'DONOR' | 'RECEIVER' | 'RUNNER'>('RECEIVER');
   const [address, setAddress] = useState('742 Folsom St');
   const [city, setCity] = useState('San Francisco');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -43,13 +44,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="auth-title"
+    <ModalShell
+      onClose={onClose}
+      labelledBy="auth-title"
+      maxWidth="max-w-md"
+      panelClassName="p-6 sm:p-8"
     >
-      <div className="relative w-full max-w-md bg-white rounded-3xl border border-[#E8DEC9] shadow-2xl p-6 sm:p-8 my-8">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#F3ECE1] text-[#7E7063] transition-colors"
@@ -128,6 +128,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                         ? 'text-[#D97706] bg-[#FEF3C7]'
                         : u.role === 'RECEIVER'
                         ? 'text-[#2D6A4F] bg-[#E8F5EE]'
+                        : u.role === 'RUNNER'
+                        ? 'text-[#2563EB] bg-[#EFF6FF]'
                         : 'text-[#BA181B] bg-[#FDF0ED]'
                     }`}
                   >
@@ -146,7 +148,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
               <label className="block text-xs font-semibold text-[#1E1611] mb-1">
                 Your Role *
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setRole('RECEIVER')}
@@ -156,7 +158,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                       : 'border-[#E8DEC9] bg-[#FAF7F2] text-[#7E7063]'
                   }`}
                 >
-                  RECEIVER (Claim food)
+                  <span className="block">RECEIVER</span>
+                  <span className="block text-[10px] font-normal mt-0.5">Claim food</span>
                 </button>
                 <button
                   type="button"
@@ -167,11 +170,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                       : 'border-[#E8DEC9] bg-[#FAF7F2] text-[#7E7063]'
                   }`}
                 >
-                  DONOR (Offer food)
+                  <span className="block">DONOR</span>
+                  <span className="block text-[10px] font-normal mt-0.5">Offer food</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole('RUNNER')}
+                  className={`p-2 rounded-xl border text-xs font-semibold text-center transition-colors ${
+                    role === 'RUNNER'
+                      ? 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]'
+                      : 'border-[#E8DEC9] bg-[#FAF7F2] text-[#7E7063]'
+                  }`}
+                >
+                  <span className="flex items-center justify-center gap-1">
+                    <Bike className="w-3 h-3" />
+                    RESCUE RUNNER
+                  </span>
+                  <span className="block text-[10px] font-normal mt-0.5">Collect & deliver</span>
                 </button>
               </div>
-              <p className="text-[10px] text-[#7E7063] mt-1">
-                * Note: Admin accounts cannot be created by public signup.
+              <p className="text-[10px] text-[#7E7063] mt-1 leading-relaxed">
+                Rescue Runners are community volunteers who collect an approved rescue from the donor and
+                deliver it to the receiver. Admin accounts cannot be created by public signup.
               </p>
             </div>
 
@@ -258,6 +278,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                       ? 'text-[#D97706] bg-[#FEF3C7]'
                       : u.role === 'RECEIVER'
                       ? 'text-[#2D6A4F] bg-[#E8F5EE]'
+                      : u.role === 'RUNNER'
+                      ? 'text-[#2563EB] bg-[#EFF6FF]'
                       : 'text-[#BA181B] bg-[#FDF0ED]'
                   }`}
                 >
@@ -267,7 +289,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
             ))}
           </div>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 };

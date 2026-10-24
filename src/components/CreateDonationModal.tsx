@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../domain/store.tsx';
+import { ModalShell } from './ModalShell.tsx';
 import { X, Clock, MapPin, Package, AlertCircle, Sparkles } from 'lucide-react';
 
 interface CreateDonationModalProps {
@@ -97,13 +98,12 @@ export const CreateDonationModal: React.FC<CreateDonationModalProps> = ({ onClos
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-title"
+    <ModalShell
+      onClose={onClose}
+      labelledBy="create-title"
+      maxWidth="max-w-xl"
+      panelClassName="p-6 sm:p-8"
     >
-      <div className="relative w-full max-w-xl bg-white rounded-3xl border border-[#E8DEC9] shadow-2xl p-6 sm:p-8 my-8">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 rounded-full hover:bg-[#F3ECE1] text-[#7E7063] transition-colors"
@@ -304,7 +304,6 @@ export const CreateDonationModal: React.FC<CreateDonationModalProps> = ({ onClos
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </ModalShell>
   );
 };

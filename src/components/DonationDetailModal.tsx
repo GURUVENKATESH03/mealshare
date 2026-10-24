@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Donation } from '../types/index.ts';
+import { Donation, PickupMode } from '../types/index.ts';
 import { useStore } from '../domain/store.tsx';
 import { getExpiryRemaining, calculateDistanceKm } from '../domain/rules.ts';
+import { ModalShell } from './ModalShell.tsx';
 import {
   X,
   MapPin,
@@ -13,6 +14,8 @@ import {
   MessageSquare,
   ShieldCheck,
   CheckCircle2,
+  UserRound,
+  Bike,
 } from 'lucide-react';
 
 interface DonationDetailModalProps {
@@ -30,6 +33,7 @@ export const DonationDetailModal: React.FC<DonationDetailModalProps> = ({
 }) => {
   const { currentUser, categories, claims, createClaim } = useStore();
   const [claimMessage, setClaimMessage] = useState('');
+  const [pickupMode, setPickupMode] = useState<PickupMode>('SELF');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState(false);
@@ -59,7 +63,7 @@ export const DonationDetailModal: React.FC<DonationDetailModalProps> = ({
     setErrorMsg(null);
     setIsSubmitting(true);
 
-    const res = createClaim(donation.id, claimMessage);
+    const res = createClaim(donation.id, claimMessage, pickupMode);
     setIsSubmitting(false);
 
     if (res.success) {
@@ -70,13 +74,12 @@ export const DonationDetailModal: React.FC<DonationDetailModalProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="detail-title"
+    <ModalShell
+      onClose={onClose}
+      labelledBy="detail-title"
+      maxWidth="max-w-2xl"
+      panelClassName="overflow-hidden"
     >
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-[#E8DEC9] shadow-2xl overflow-hidden my-8">
         {/* Top Floating Close Button */}
         <button
           onClick={onClose}
@@ -260,7 +263,12 @@ export const DonationDetailModal: React.FC<DonationDetailModalProps> = ({
                 <div className="p-4 rounded-xl bg-[#E8F5EE] border border-[#2D6A4F]/20 text-[#2D6A4F] text-xs flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>Your claim was submitted to {donation.donor_name}. You will be notified once reviewed.</span>
+                    <span>
+                      Your claim was submitted to {donation.donor_name}.
+                      {pickupMode === 'RUNNER'
+                        ? ' A Rescue Runner can accept the run once it is approved.'
+                        : ' You will be notified once it is reviewed.'}
+                    </span>
                   </div>
                   <button
                     onClick={onClose}
@@ -276,6 +284,56 @@ export const DonationDetailModal: React.FC<DonationDetailModalProps> = ({
                       {errorMsg}
                     </div>
                   )}
+
+                  <div>
+                    <span className="block text-xs font-medium text-[#4E4035] mb-1.5">
+                      How will this be collected?
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPickupMode('SELF')}
+                        aria-pressed={pickupMode === 'SELF'}
+                        className={`p-3 rounded-xl border text-left transition-colors ${
+                          pickupMode === 'SELF'
+                            ? 'border-[#2D6A4F] bg-[#E8F5EE]'
+                            : 'border-[#E8DEC9] bg-[#FAF7F2] hover:bg-[#F3ECE1]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-[#1E1611]">
+                          <UserRound className="w-3.5 h-3.5 text-[#2D6A4F]" />
+                          I'll collect it myself
+                        </span>
+                        <span className="block text-[11px] text-[#7E7063] mt-1 leading-relaxed">
+                          You receive a single-use 6-digit code for the handover.
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPickupMode('RUNNER')}
+                        aria-pressed={pickupMode === 'RUNNER'}
+                        className={`p-3 rounded-xl border text-left transition-colors ${
+                          pickupMode === 'RUNNER'
+                            ? 'border-[#2563EB] bg-[#EFF6FF]'
+                            : 'border-[#E8DEC9] bg-[#FAF7F2] hover:bg-[#F3ECE1]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-[#1E1611]">
+                          <Bike className="w-3.5 h-3.5 text-[#2563EB]" />
+                          Send a Rescue Runner
+                        </span>
+                        <span className="block text-[11px] text-[#7E7063] mt-1 leading-relaxed">
+                          A nearby runner collects and delivers it. The one-time code goes to them.
+                        </span>
+                      </button>
+                    </div>
+                    {pickupMode === 'RUNNER' && (
+                      <p className="mt-2 text-[11px] text-[#2563EB] bg-[#EFF6FF] border border-[#2563EB]/20 rounded-lg px-2.5 py-1.5">
+                        You stay the claim owner. Once the donor approves, a Rescue Runner can accept the run.
+                      </p>
+                    )}
+                  </div>
 
                   <div>
                     <label htmlFor="claim-msg" className="block text-xs font-medium text-[#4E4035] mb-1">
@@ -311,7 +369,11 @@ export const DonationDetailModal: React.FC<DonationDetailModalProps> = ({
                         disabled={isSubmitting}
                         className="px-5 py-2.5 rounded-xl bg-[#2D6A4F] hover:bg-[#1B4332] text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50 whitespace-nowrap"
                       >
-                        {isSubmitting ? 'Submitting...' : 'Claim This Food'}
+                        {isSubmitting
+                          ? 'Submitting...'
+                          : pickupMode === 'RUNNER'
+                          ? 'Request Claim + Runner'
+                          : 'Claim This Food'}
                       </button>
                     </div>
                   </div>
@@ -330,7 +392,6 @@ export const DonationDetailModal: React.FC<DonationDetailModalProps> = ({
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };

@@ -10,6 +10,8 @@ import {
   XCircle,
   AlertCircle,
   MessageSquare,
+  Bike,
+  UserRound,
 } from 'lucide-react';
 
 interface MyRequestsViewProps {
@@ -95,6 +97,25 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                     <span className="text-xs text-[#7E7063]">
                       Requested {new Date(claim.requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
+                    <span
+                      className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md border ${
+                        claim.pickup_mode === 'RUNNER'
+                          ? 'bg-[#EFF6FF] text-[#2563EB] border-[#2563EB]/20'
+                          : 'bg-[#FAF7F2] text-[#4E4035] border-[#E8DEC9]'
+                      }`}
+                    >
+                      {claim.pickup_mode === 'RUNNER' ? (
+                        <>
+                          <Bike className="w-3 h-3" />
+                          Rescue Runner
+                        </>
+                      ) : (
+                        <>
+                          <UserRound className="w-3 h-3" />
+                          Self pickup
+                        </>
+                      )}
+                    </span>
                   </div>
 
                   <h3 className="font-display font-bold text-lg text-[#1E1611]">
@@ -117,6 +138,14 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                   {claim.request_message && (
                     <p className="text-xs text-[#7E7063] italic">
                       Your note: "{claim.request_message}"
+                    </p>
+                  )}
+
+                  {claim.pickup_mode === 'RUNNER' && claim.status === 'APPROVED' && (
+                    <p className="text-[11px] text-[#2563EB]">
+                      {claim.runner_name
+                        ? `Rescue Runner ${claim.runner_name} is handling this pickup (${claim.runner_phone}).`
+                        : 'No Rescue Runner has accepted yet. The one-time code will be issued to them when they accept.'}
                     </p>
                   )}
                 </div>
@@ -142,7 +171,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                     </button>
                   )}
 
-                  {claim.status === 'APPROVED' && !tracking && (
+                  {claim.status === 'APPROVED' && !tracking && claim.pickup_mode !== 'RUNNER' && (
                     <button
                       onClick={() => setStartingClaimId(claim.id)}
                       className="px-4 py-2 rounded-xl bg-[#2D6A4F] hover:bg-[#1B4332] text-white text-xs font-semibold shadow-xs flex items-center gap-1.5"
@@ -152,13 +181,24 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                     </button>
                   )}
 
+                  {claim.status === 'APPROVED' && !tracking && claim.pickup_mode === 'RUNNER' && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#EFF6FF] border border-[#2563EB]/20 text-[11px] font-semibold text-[#2563EB]">
+                      <Bike className="w-4 h-4" />
+                      Waiting for a Rescue Runner
+                    </span>
+                  )}
+
                   {tracking && (
                     <button
                       onClick={() => onOpenTracking(tracking.id)}
                       className="px-4 py-2 rounded-xl bg-[#2D6A4F] hover:bg-[#1B4332] text-white text-xs font-semibold shadow-xs flex items-center gap-1.5"
                     >
                       <Truck className="w-4 h-4" />
-                      {tracking.pickup_status === 'VERIFIED' ? 'View Receipt' : 'Show Handover Code'}
+                      {tracking.pickup_status === 'VERIFIED'
+                        ? 'View Receipt'
+                        : claim.pickup_mode === 'RUNNER'
+                        ? 'Track Rescue Runner'
+                        : 'Show Handover Code'}
                     </button>
                   )}
                 </div>
@@ -169,6 +209,10 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                     <h4 className="text-xs font-bold text-[#1E1611]">
                       Ready to collect? Enter pickup details:
                     </h4>
+                    <p className="text-[11px] text-[#7E7063]">
+                      Starting pickup issues a fresh single-use 6-digit handover code. It expires after
+                      30 minutes and can only be verified once.
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <input
                         type="text"

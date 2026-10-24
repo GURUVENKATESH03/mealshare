@@ -14,6 +14,7 @@ import { AuthModal } from './components/AuthModal.tsx';
 import { VerifyHandoverModal } from './components/VerifyHandoverModal.tsx';
 import { MyRequestsView } from './components/MyRequestsView.tsx';
 import { MyDonationsView } from './components/MyDonationsView.tsx';
+import { RunnerRunsView } from './components/RunnerRunsView.tsx';
 import { ToastContainer } from './components/Toast.tsx';
 import { Donation } from './types/index.ts';
 import {
@@ -29,6 +30,7 @@ import {
   ArrowRight,
   Package,
   MessageSquare,
+  Bike,
 } from 'lucide-react';
 
 const FoodSaverApp: React.FC = () => {
@@ -42,7 +44,9 @@ const FoodSaverApp: React.FC = () => {
     setRequestedReviewDonationId,
   } = useStore();
 
-  const [currentTab, setCurrentTab] = useState<'feed' | 'map' | 'my-claims' | 'my-donations' | 'admin'>('feed');
+  const [currentTab, setCurrentTab] = useState<
+    'feed' | 'map' | 'my-claims' | 'my-donations' | 'runner' | 'admin'
+  >('feed');
 
   // React to toast action to review claim
   React.useEffect(() => {
@@ -145,7 +149,11 @@ const FoodSaverApp: React.FC = () => {
               }}
               className="underline font-bold hover:text-[#FEF3C7] transition-colors"
             >
-              {currentUser?.role === 'DONOR' ? 'Verify Handover Code →' : 'Show Handover Code →'}
+              {currentUser?.role === 'DONOR'
+                ? 'Verify Handover Code →'
+                : currentActiveTracking.otp_holder_id === currentUser?.id
+                ? 'Show Handover Code →'
+                : 'Track Rescue Runner →'}
             </button>
           </div>
         </div>
@@ -366,6 +374,11 @@ const FoodSaverApp: React.FC = () => {
           />
         )}
 
+        {/* TAB: Rescue Runner dispatch */}
+        {currentTab === 'runner' && (
+          <RunnerRunsView onOpenTracking={(id) => setActiveTrackingId(id)} />
+        )}
+
         {/* TAB 4: Donor Listings */}
         {currentTab === 'my-donations' && (
           <MyDonationsView
@@ -418,6 +431,16 @@ const FoodSaverApp: React.FC = () => {
           >
             <Package className="w-4 h-4" />
             <span>Listings</span>
+          </button>
+        ) : currentUser?.role === 'RUNNER' ? (
+          <button
+            onClick={() => setCurrentTab('runner')}
+            className={`flex flex-col items-center gap-1 p-1 transition-colors ${
+              currentTab === 'runner' ? 'text-[#2563EB] font-bold' : 'text-[#7E7063]'
+            }`}
+          >
+            <Bike className="w-4 h-4" />
+            <span>Rescue Runs</span>
           </button>
         ) : (
           <button
@@ -538,7 +561,9 @@ const FoodSaverApp: React.FC = () => {
               const d = donations.find((x) => x.id === id);
               if (d) setReviewDonation(d);
             } else if (type === 'requests') {
-              setCurrentTab('my-claims');
+              setCurrentTab(currentUser?.role === 'RUNNER' ? 'runner' : 'my-claims');
+            } else if (type === 'runner') {
+              setCurrentTab('runner');
             } else if (type === 'tracking') {
               const trk = trackingRecords.find((t) => t.id === id || t.donation_request_id === id);
               if (trk) setActiveTrackingId(trk.id);
