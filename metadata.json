@@ -1,0 +1,6 @@
+{
+  "name": "FoodSaver",
+  "description": "Peer-to-peer surplus food coordination platform connecting donors and receivers with verified handovers.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
