@@ -83,7 +83,7 @@ export const DonationDetailModal: React.FC<DonationDetailModalProps> = ({
         {/* Top Floating Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-20 p-2.5 rounded-full bg-white/90 hover:bg-white text-[#1E1611] backdrop-blur-md shadow-md transition-all hover:scale-105 border border-[#E8DEC9]"
+          className="absolute top-3 right-3 sm:top-4 sm:right-4 z-30 p-2 rounded-xl bg-white/95 hover:bg-white text-[#1E1611] backdrop-blur-md shadow-md transition-all hover:scale-105 border border-[#E8DEC9]"
           aria-label="Close dialog"
         >
           <X className="w-5 h-5" />
@@ -287,7 +287,7 @@ export const DonationDetailModal: React.FC<DonationDetailModalProps> = ({
 
                   <div>
                     <span className="block text-xs font-medium text-[#4E4035] mb-1.5">
-                      How will this be collected?
+                      How will this food be collected?
                     </span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <button
@@ -302,10 +302,10 @@ export const DonationDetailModal: React.FC<DonationDetailModalProps> = ({
                       >
                         <span className="flex items-center gap-1.5 text-xs font-bold text-[#1E1611]">
                           <UserRound className="w-3.5 h-3.5 text-[#2D6A4F]" />
-                          I'll collect it myself
+                          I will collect it myself
                         </span>
                         <span className="block text-[11px] text-[#7E7063] mt-1 leading-relaxed">
-                          You receive a single-use 6-digit code for the handover.
+                          Direct in-person pickup from the donor using your private one-time 6-digit OTP code.
                         </span>
                       </button>
 
@@ -321,16 +321,16 @@ export const DonationDetailModal: React.FC<DonationDetailModalProps> = ({
                       >
                         <span className="flex items-center gap-1.5 text-xs font-bold text-[#1E1611]">
                           <Bike className="w-3.5 h-3.5 text-[#2563EB]" />
-                          Send a Rescue Runner
+                          Need Delivery Partner (Food Courier)
                         </span>
                         <span className="block text-[11px] text-[#7E7063] mt-1 leading-relaxed">
-                          A nearby runner collects and delivers it. The one-time code goes to them.
+                          A volunteer community courier collects from donor and delivers to your address.
                         </span>
                       </button>
                     </div>
                     {pickupMode === 'RUNNER' && (
                       <p className="mt-2 text-[11px] text-[#2563EB] bg-[#EFF6FF] border border-[#2563EB]/20 rounded-lg px-2.5 py-1.5">
-                        You stay the claim owner. Once the donor approves, a Rescue Runner can accept the run.
+                        You remain the claim owner. Once the donor approves, a Community Courier / Food Runner can accept the dispatch run and bring it to you.
                       </p>
                     )}
                   </div>

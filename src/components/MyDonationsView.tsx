@@ -144,6 +144,16 @@ export const MyDonationsView: React.FC<MyDonationsViewProps> = ({
                     )}
                   </button>
 
+                  {activeTracking && activeTracking.pickup_status === 'EN_ROUTE' && (
+                    <button
+                      onClick={() => onOpenTracking(activeTracking.id)}
+                      className="px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+                    >
+                      <Truck className="w-4 h-4" />
+                      <span>Live Tracking</span>
+                    </button>
+                  )}
+
                   {activeTracking && activeTracking.pickup_status !== 'VERIFIED' && (
                     <button
                       onClick={() =>

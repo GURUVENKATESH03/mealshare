@@ -252,7 +252,7 @@ export const RunnerRunsView: React.FC<RunnerRunsViewProps> = ({ onOpenTracking }
                       ) : (
                         <KeyRound className="w-4 h-4" />
                       )}
-                      {tracking.pickup_status === 'VERIFIED' ? 'View Receipt' : 'Show One-Time Code'}
+                      {tracking.pickup_status === 'VERIFIED' ? 'View Receipt' : 'Live Tracking & OTP Code'}
                     </button>
                   )}
                 </div>

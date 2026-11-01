@@ -31,7 +31,18 @@ import {
   Package,
   MessageSquare,
   Bike,
+  LocateFixed,
+  Loader2,
+  Radio,
 } from 'lucide-react';
+
+const NEIGHBORHOOD_PRESETS: Record<string, { name: string; lat: number; lng: number }> = {
+  mission: { name: 'Mission District, SF', lat: 37.7599, lng: -122.4148 },
+  soma: { name: 'SOMA / Downtown, SF', lat: 37.7818, lng: -122.4061 },
+  castro: { name: 'Castro / Noe Valley, SF', lat: 37.7609, lng: -122.435 },
+  richmond: { name: 'Richmond / Sunset, SF', lat: 37.7798, lng: -122.477 },
+  oakland: { name: 'Downtown Oakland', lat: 37.8044, lng: -122.2712 },
+};
 
 const FoodSaverApp: React.FC = () => {
   const {
@@ -42,11 +53,58 @@ const FoodSaverApp: React.FC = () => {
     trackingRecords,
     requestedReviewDonationId,
     setRequestedReviewDonationId,
+    updateCurrentLocation,
+    addToast,
   } = useStore();
 
   const [currentTab, setCurrentTab] = useState<
     'feed' | 'map' | 'my-claims' | 'my-donations' | 'runner' | 'admin'
   >('feed');
+
+  // Device Geolocation state
+  const [isLocating, setIsLocating] = useState(false);
+  const [hasUserGivenLocation, setHasUserGivenLocation] = useState(false);
+
+  const handleRequestLocation = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      addToast({
+        title: 'Geolocation Not Supported',
+        message: 'Your browser does not support GPS. You can pick a neighborhood from the dropdown.',
+        type: 'warning',
+        durationMs: 5000,
+      });
+      return;
+    }
+
+    setIsLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setIsLocating(false);
+        setHasUserGivenLocation(true);
+        updateCurrentLocation(pos.coords.latitude, pos.coords.longitude);
+        addToast({
+          title: '📍 Live Location Activated!',
+          message: `Coordinates updated (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}). Food listing distances are now live!`,
+          type: 'success',
+          durationMs: 5000,
+        });
+      },
+      (err) => {
+        setIsLocating(false);
+        addToast({
+          title: 'Location Permission Denied or Timed Out',
+          message:
+            err.code === err.PERMISSION_DENIED
+              ? 'Please allow location in your browser address bar, or choose a SF neighborhood from the list.'
+              : 'Could not get GPS fix. Using default area.',
+          type: 'warning',
+          durationMs: 6000,
+        });
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  };
 
   // React to toast action to review claim
   React.useEffect(() => {
@@ -125,6 +183,20 @@ const FoodSaverApp: React.FC = () => {
         onOpenVerifyHandover={() => {
           setVerifyDonationId(null);
           setIsVerifyHandoverOpen(true);
+        }}
+        onOpenLiveTracking={() => {
+          if (currentActiveTracking) {
+            setActiveTrackingId(currentActiveTracking.id);
+          } else if (trackingRecords.length > 0) {
+            setActiveTrackingId(trackingRecords[0].id);
+          } else {
+            addToast({
+              title: 'No Active Dispatches',
+              message: 'Claim an available surplus food listing to track delivery in real time.',
+              type: 'info',
+              durationMs: 4000,
+            });
+          }
         }}
       />
 
@@ -226,6 +298,66 @@ const FoodSaverApp: React.FC = () => {
 
             {/* Filter and Discovery Bar */}
             <div id="search-anchor" className="space-y-4 pt-2">
+              {/* Real Geolocation Access Prompt Bar */}
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-[#E8DEC9] shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="w-9 h-9 rounded-xl bg-[#2D6A4F]/10 text-[#2D6A4F] flex items-center justify-center shrink-0">
+                    <LocateFixed className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-[#1E1611]">
+                        {hasUserGivenLocation ? '📍 Using Your Live Device GPS' : '📍 Current Search Location: San Francisco (Default)'}
+                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#FAF7F2] text-[#7E7063] border border-[#E8DEC9]">
+                        {currentUser?.latitude.toFixed(4)}, {currentUser?.longitude.toFixed(4)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#7E7063] mt-0.5">
+                      {hasUserGivenLocation
+                        ? 'Listing distances and pickup routes are calculated dynamically from your position.'
+                        : 'Grant location permission to find surplus bakeries and meals within walking distance.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleRequestLocation}
+                    disabled={isLocating}
+                    className="px-3.5 py-2 rounded-xl bg-[#2D6A4F] hover:bg-[#1B4332] text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isLocating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MapPin className="w-3.5 h-3.5" />}
+                    <span>{isLocating ? 'Detecting Location...' : hasUserGivenLocation ? 'Refresh GPS' : 'Use My Current Location'}</span>
+                  </button>
+
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const preset = NEIGHBORHOOD_PRESETS[e.target.value];
+                      if (preset) {
+                        updateCurrentLocation(preset.lat, preset.lng);
+                        setHasUserGivenLocation(true);
+                        addToast({
+                          title: `Location set to ${preset.name}`,
+                          message: `Distances on all listings recalculated from ${preset.name}.`,
+                          type: 'info',
+                          durationMs: 4000,
+                        });
+                      }
+                    }}
+                    className="px-2.5 py-2 rounded-xl bg-[#FAF7F2] border border-[#E8DEC9] text-xs font-medium text-[#4E4035] focus:outline-none"
+                  >
+                    <option value="" disabled>Change Area Preset</option>
+                    <option value="mission">Mission District</option>
+                    <option value="soma">SOMA / Downtown</option>
+                    <option value="castro">Castro / Noe Valley</option>
+                    <option value="richmond">Richmond / Sunset</option>
+                    <option value="oakland">Downtown Oakland</option>
+                  </select>
+                </div>
+              </div>
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 {/* Search Bar */}
                 <div className="relative flex-1 max-w-md">
@@ -453,6 +585,22 @@ const FoodSaverApp: React.FC = () => {
             <span>Requests</span>
           </button>
         )}
+
+        <button
+          onClick={() => {
+            if (currentActiveTracking) {
+              setActiveTrackingId(currentActiveTracking.id);
+            } else if (trackingRecords.length > 0) {
+              setActiveTrackingId(trackingRecords[0].id);
+            }
+          }}
+          className={`flex flex-col items-center gap-1 p-1 transition-colors ${
+            currentActiveTracking ? 'text-[#2563EB] font-bold' : 'text-[#7E7063]'
+          }`}
+        >
+          <Radio className="w-4 h-4" />
+          <span>Tracking</span>
+        </button>
 
         <button
           onClick={() => {

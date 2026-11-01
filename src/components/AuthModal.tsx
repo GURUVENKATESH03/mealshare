@@ -178,20 +178,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                   onClick={() => setRole('RUNNER')}
                   className={`p-2 rounded-xl border text-xs font-semibold text-center transition-colors ${
                     role === 'RUNNER'
-                      ? 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]'
-                      : 'border-[#E8DEC9] bg-[#FAF7F2] text-[#7E7063]'
+                      ? 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] ring-1 ring-[#2563EB]'
+                      : 'border-[#E8DEC9] bg-[#FAF7F2] text-[#7E7063] hover:bg-[#F3ECE1]'
                   }`}
                 >
-                  <span className="flex items-center justify-center gap-1">
-                    <Bike className="w-3 h-3" />
-                    RESCUE RUNNER
+                  <span className="flex items-center justify-center gap-1 font-bold">
+                    <Bike className="w-3.5 h-3.5 text-[#2563EB]" />
+                    COMMUNITY COURIER
                   </span>
-                  <span className="block text-[10px] font-normal mt-0.5">Collect & deliver</span>
+                  <span className="block text-[10px] font-normal mt-0.5 text-[#2563EB]">
+                    Delivery Partner
+                  </span>
                 </button>
               </div>
-              <p className="text-[10px] text-[#7E7063] mt-1 leading-relaxed">
-                Rescue Runners are community volunteers who collect an approved rescue from the donor and
-                deliver it to the receiver. Admin accounts cannot be created by public signup.
+              <p className="text-[10px] text-[#7E7063] mt-2 leading-relaxed bg-[#FAF7F2] p-2 rounded-lg border border-[#E8DEC9]">
+                <strong>Community Couriers:</strong> Volunteer delivery partners (like an on-demand food runner for surplus rescue) who accept delivery runs, pick up packages from donors using verification codes, and deliver directly to receivers in need.
               </p>
             </div>
 

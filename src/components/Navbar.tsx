@@ -14,6 +14,7 @@ import {
   LogOut,
   PlusCircle,
   Bike,
+  Radio,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -24,6 +25,7 @@ interface NavbarProps {
   onOpenAuth: () => void;
   onOpenChat: () => void;
   onOpenVerifyHandover?: () => void;
+  onOpenLiveTracking?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -34,6 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   onOpenChat,
   onOpenVerifyHandover,
+  onOpenLiveTracking,
 }) => {
   const {
     currentUser,
@@ -134,6 +137,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="whitespace-nowrap shrink-0 transition-colors py-1 hover:text-[#1E1611]"
           >
             Messages
+          </button>
+
+          <button
+            onClick={onOpenLiveTracking}
+            className={`whitespace-nowrap shrink-0 transition-colors py-1 flex items-center gap-1.5 ${
+              trackingRecords.some((t) => t.pickup_status === 'EN_ROUTE')
+                ? 'text-[#2563EB] font-bold'
+                : 'text-[#4E4035] hover:text-[#1E1611]'
+            }`}
+          >
+            <Radio className="w-3.5 h-3.5 text-[#2563EB]" />
+            <span>Live Tracking</span>
+            {trackingRecords.some((t) => t.pickup_status === 'EN_ROUTE') && (
+              <span className="w-2 h-2 rounded-full bg-[#2563EB] animate-pulse" />
+            )}
           </button>
 
           {currentUser?.role === 'ADMIN' && (

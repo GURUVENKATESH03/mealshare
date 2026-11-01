@@ -57,13 +57,13 @@ export const ModalShell: React.FC<ModalShellProps> = ({
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-[9999] overflow-y-auto bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelledBy}
     >
       <div
-        className="flex min-h-full items-center justify-center p-4"
+        className="flex min-h-full justify-center p-4 sm:p-6 py-6 sm:py-10"
         onMouseDown={(event) => {
           if (event.target === event.currentTarget) onClose();
         }}
@@ -71,7 +71,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
         <div
           ref={panelRef}
           tabIndex={-1}
-          className={`relative w-full ${maxWidth} bg-white rounded-3xl border border-[#E8DEC9] shadow-2xl focus:outline-none ${panelClassName}`}
+          className={`relative w-full ${maxWidth} my-auto bg-white rounded-3xl border border-[#E8DEC9] shadow-2xl focus:outline-none ${panelClassName}`}
           onMouseDown={(event) => event.stopPropagation()}
         >
           {children}

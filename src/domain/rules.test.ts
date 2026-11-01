@@ -228,3 +228,40 @@ test('mock notification system builds valid toast payloads for receiver claims',
   assert.equal(mockToast.actionLabel, 'Review Request');
 });
 
+test('live tracking calculates decreasing distance as courier approaches donor', () => {
+  const donorLocation = { latitude: 37.7818, longitude: -122.4061 }; // Green Table Bistro
+  const initialCourierLocation = { latitude: 37.7695, longitude: -122.4145 }; // 1.6 km away
+  const closerCourierLocation = { latitude: 37.7780, longitude: -122.4080 }; // ~0.5 km away
+
+  const initialDist = calculateDistanceKm(initialCourierLocation, donorLocation);
+  const closerDist = calculateDistanceKm(closerCourierLocation, donorLocation);
+
+  assert.ok(initialDist > closerDist, 'Approaching courier distance must decrease');
+  assert.ok(closerDist <= 0.6, `Closer distance expected ~0.5km, got ${closerDist}`);
+});
+
+test('one-time OTP permanently prevents re-verification after being consumed', () => {
+  const validCode = '839210';
+  
+  // Step 1: Valid initial verification
+  const firstAttempt = verifyHandoverCode({
+    enteredCode: validCode,
+    expectedCode: validCode,
+    currentAttempts: 0,
+    trackingStatus: 'EN_ROUTE',
+  });
+  assert.equal(firstAttempt.success, true);
+
+  // Step 2: Second attempt with the exact same valid code after consumption timestamp is recorded
+  const replayAttempt = verifyHandoverCode({
+    enteredCode: validCode,
+    expectedCode: validCode,
+    currentAttempts: 0,
+    trackingStatus: 'EN_ROUTE',
+    otpConsumedAt: new Date().toISOString(),
+  });
+  assert.equal(replayAttempt.success, false);
+  assert.ok(replayAttempt.error?.includes('USED'), 'Must reject replay of used one-time code');
+});
+
+

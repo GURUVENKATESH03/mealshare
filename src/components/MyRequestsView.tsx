@@ -196,9 +196,7 @@ export const MyRequestsView: React.FC<MyRequestsViewProps> = ({
                       <Truck className="w-4 h-4" />
                       {tracking.pickup_status === 'VERIFIED'
                         ? 'View Receipt'
-                        : claim.pickup_mode === 'RUNNER'
-                        ? 'Track Rescue Runner'
-                        : 'Show Handover Code'}
+                        : 'Live Tracking & OTP Code'}
                     </button>
                   )}
                 </div>

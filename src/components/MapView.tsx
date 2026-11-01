@@ -296,7 +296,7 @@ export const MapView: React.FC<MapViewProps> = ({ onSelectDonation, activeTracki
   return (
     <div className="relative isolate w-full h-[calc(100vh-140px)] min-h-[500px] rounded-2xl overflow-hidden border border-[#E8DEC9] bg-[#FAF7F2]">
       {/* Floating Radius & Category Filter Bar */}
-      <div className="absolute top-4 left-4 z-[1000] bg-white/95 backdrop-blur-md p-3 rounded-xl border border-[#E8DEC9] shadow-md flex flex-wrap items-center gap-3">
+      <div className="absolute top-4 left-4 z-20 bg-white/95 backdrop-blur-md p-3 rounded-xl border border-[#E8DEC9] shadow-md flex flex-wrap items-center gap-3">
         {/* Radius selector */}
         <div className="flex items-center gap-1.5 text-xs font-medium text-[#4E4035]">
           <Navigation className="w-3.5 h-3.5 text-[#D97706]" />
@@ -360,7 +360,7 @@ export const MapView: React.FC<MapViewProps> = ({ onSelectDonation, activeTracki
 
       {/* Location status card (bottom-left, away from map zoom controls) */}
       {usingDeviceLocation ? (
-        <div className="absolute bottom-4 left-4 z-[1000] bg-white/95 backdrop-blur-md px-3 py-2 rounded-xl border border-[#2D6A4F]/30 shadow-md flex items-center gap-2 text-[11px] text-[#2D6A4F] font-semibold">
+        <div className="absolute bottom-4 left-4 z-20 bg-white/95 backdrop-blur-md px-3 py-2 rounded-xl border border-[#2D6A4F]/30 shadow-md flex items-center gap-2 text-[11px] text-[#2D6A4F] font-semibold">
           <MapPin className="w-3.5 h-3.5" />
           Using your live device location
           <button
@@ -373,7 +373,7 @@ export const MapView: React.FC<MapViewProps> = ({ onSelectDonation, activeTracki
           </button>
         </div>
       ) : (
-        <div className="absolute bottom-4 left-4 z-[1000] w-[min(20rem,calc(100%-2rem))] bg-white/95 backdrop-blur-md p-3 rounded-xl border border-[#E8DEC9] shadow-md">
+        <div className="absolute bottom-4 left-4 z-20 w-[min(20rem,calc(100%-2rem))] bg-white/95 backdrop-blur-md p-3 rounded-xl border border-[#E8DEC9] shadow-md">
           <div className="flex items-start gap-2">
             <span className="w-7 h-7 rounded-lg bg-[#D97706]/10 text-[#D97706] flex items-center justify-center shrink-0">
               {geoStatus === 'requesting' ? (
